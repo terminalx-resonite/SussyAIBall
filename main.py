@@ -30,6 +30,7 @@ playdir = os.environ.get('PLAY_DIRECTORY')
 if playdir is None:
     playdir = 'play'
 playurl = f"{url}:{port}/{playdir}/"
+uid = uuid.uuid4()
 
 @app.route('/tts', methods=['POST'])
 def tts():
