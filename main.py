@@ -4,14 +4,29 @@ import os
 import ffmpeg
 import requests
 import subprocess
+import socket
 
 app = Flask(__name__)
 
-url = os.environ.get('URL')
-port = os.environ.get('PORT')
+directories = ['play', 'storage']
+
+# Function to create directories if they do not exist
+def create_directories_if_not_exist(directories):
+    for directory in directories:
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+            print(f"Directory '{directory}' created.")
+        else:
+            print(f"Directory '{directory}' already exists.")
+
+# Call the function
+create_directories_if_not_exist(directories)
+
+url = f"http://{socket.gethostbyname(socket.gethostname())}"
+port = 5000
 playdir = os.environ.get('PLAY_DIRECTORY')
 if playdir is None:
-    playdir = 'null'
+    playdir = 'play'
 playurl = f"{url}:{port}/{playdir}/"
 
 @app.route('/tts', methods=['POST'])
@@ -29,7 +44,7 @@ def play(path):
 
 def generate_tts(text):
     uid = str(uuid.uuid4())
-    endpoint_url = 'http://185.130.224.61:5000/api/v1/chat'
+    endpoint_url = f'http://185.130.224.61:5000/api/v1/chat'
     data = {
         # your data here
     }
@@ -54,7 +69,8 @@ def generate_tts(text):
 
 def generate_tts(text):
     uid = str(uuid.uuid4())
-    endpoint_url = 'http://185.130.224.61:5000/api/v1/chat'
+    MODEL_SERVER = os.environ.get("MODEL_SERVER")
+    endpoint_url = f'http://{MODEL_SERVER}:5000/api/v1/chat'
     data = {
         "user_input": text,
         "max_new_tokens": 250,
