@@ -5,6 +5,8 @@ import ffmpeg
 import requests
 import subprocess
 import socket
+import schedule
+import time
 
 app = Flask(__name__)
 
@@ -19,11 +21,11 @@ def create_directories_if_not_exist(directories):
         else:
             print(f"Directory '{directory}' already exists.")
 
-# Call the function
 create_directories_if_not_exist(directories)
 
 url = f"http://{socket.gethostbyname(socket.gethostname())}"
 port = 5000
+MODEL_SERVER = os.environ.get("MODEL_SERVER")
 playdir = os.environ.get('PLAY_DIRECTORY')
 if playdir is None:
     playdir = 'play'
@@ -44,32 +46,7 @@ def play(path):
 
 def generate_tts(text):
     uid = str(uuid.uuid4())
-    endpoint_url = f'http://185.130.224.61:5000/api/v1/chat'
-    data = {
-        # your data here
-    }
-    response = requests.post(endpoint_url, json=data)
-
-    with open(f'storage/{uid}.txt', 'w') as text_file:
-        text_file.write(response.content.decode('utf-8'))
-
-    # Using subprocess to call espeak command
-    subprocess.run(['espeak', '-ven', '+f3', '-s150', f'-w storage/{uid}.wav', response.content.decode('utf-8')])
-
-    convert(f'storage/{uid}.wav', f'storage/{uid}.ogg')
-
-    # Cleaning up files
-    def cleanup_files():
-        os.remove(f'storage/{uid}.wav')
-        os.remove(f'storage/{uid}.ogg')
-
-    # Clean up after 60 seconds
-    cleanup_files()
-    return playurl + uid + '.ogg'
-
-def generate_tts(text):
-    uid = str(uuid.uuid4())
-    MODEL_SERVER = os.environ.get("MODEL_SERVER")
+    
     endpoint_url = f'http://{MODEL_SERVER}:5000/api/v1/chat'
     data = {
         "user_input": text,
@@ -116,21 +93,26 @@ def generate_tts(text):
         "skip_special_tokens": True,
         "stopping_strings": []
     }
+    
     response = requests.post(endpoint_url, json=data)
 
-    with open(f'storage/{uid}.ogg', 'wb') as file:
-        file.write(response.content)
+    with open(f'storage/{uid}.txt', 'w') as text_file:
+        text_file.write(response.content.decode('utf-8'))
+
+    # Using subprocess to call espeak command
+    subprocess.run(['espeak', '-ven', '+f3', '-s150', f'-w storage/{uid}.wav', response.content.decode('utf-8')])
 
     convert(f'storage/{uid}.wav', f'storage/{uid}.ogg')
 
-    # Cleaning up files
-    def cleanup_files():
-        os.remove(f'storage/{uid}.wav')
-        os.remove(f'storage/{uid}.ogg')
+    return playurl + uid + '.ogg'
 
-    # Clean up after 60 seconds
-    cleanup_files()
+# Cleaning up files
+def cleanup_WAV():
+    os.remove(f'storage/{uid}.wav')
 
+def cleanup_OGG():
+    os.remove(f'storage/{uid}.ogg')
+        
     return playurl + uid + '.ogg'
 
 def convert(input, output):
@@ -142,5 +124,11 @@ def convert(input, output):
     except ffmpeg.Error as e:
         print(f'An error occurred: {e.stderr}')
 
+# Schedule the job to run every 10 minutes
+schedule.every(10).minutes.do(cleanup_WAV)
+schedule.every(1).hour.do(cleanup_OGG)
+
 if __name__ == '__main__':
     app.run(port=5000)
+    schedule.run_pending()
+    time.sleep(1)
