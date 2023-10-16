@@ -29,8 +29,6 @@ hostname = socket.gethostname()
 ## getting the IP address using socket.gethostbyname() method
 ip_address = socket.gethostbyname(hostname)
 
-ai_history =  {"internal": [], "visible": []}
-
 url = f"http://{ip_address}"
 port = 5000
 MODEL_SERVER = os.environ.get("MODEL_SERVER")
@@ -62,7 +60,7 @@ def generate_tts(text, history):
         "max_new_tokens": 250,
         "auto_max_new_tokens": False,
         "max_tokens_second": 0,
-        "history": history,
+        "history": {"internal": [], "visible": []},
         "mode": "instruct",
         "character": "Example",
         "instruction_template": "Vicuna-v1.1",
@@ -114,9 +112,6 @@ def generate_tts(text, history):
     results = data['results']
     history = results[0]["history"]
     espeak_tts_result = history["visible"][0][1]
-    global ai_history
-
-    ai_history = history 
 
     # Using subprocess to call espeak command
     subprocess.run(['espeak', '-ven', f'{espeak_tts_result}', '-s150', f'-w storage/{uid}.wav', response.content.decode('utf-8')])
