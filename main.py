@@ -7,6 +7,8 @@ import subprocess
 import socket
 import schedule
 import time
+from gevent.pywsgi import WSGIServer
+import json
 
 app = Flask(__name__)
 
@@ -23,7 +25,13 @@ def create_directories_if_not_exist(directories):
 
 create_directories_if_not_exist(directories)
 
-url = f"http://{socket.gethostbyname(socket.gethostname())}"
+hostname = socket.gethostname()
+## getting the IP address using socket.gethostbyname() method
+ip_address = socket.gethostbyname(hostname)
+
+ai_history =  {"internal": [], "visible": []}
+
+url = f"http://{ip_address}"
 port = 5000
 MODEL_SERVER = os.environ.get("MODEL_SERVER")
 playdir = os.environ.get('PLAY_DIRECTORY')
@@ -39,13 +47,13 @@ def tts():
     print(parsed_body)
     if not body:
         return "Hello. Sorry we cannot do that request since you really have not given much to go on. you dingus.", 500
-    return generate_tts(parsed_body), 200
+    return generate_tts(parsed_body, ai_history), 200
 
 @app.route('/play/<path:path>')
 def play(path):
     return send_from_directory('storage', path)
 
-def generate_tts(text):
+def generate_tts(text, history):
     uid = str(uuid.uuid4())
     
     endpoint_url = f'http://{MODEL_SERVER}:5000/api/v1/chat'
@@ -54,7 +62,7 @@ def generate_tts(text):
         "max_new_tokens": 250,
         "auto_max_new_tokens": False,
         "max_tokens_second": 0,
-        "history": {"internal": [], "visible": []},
+        "history": history,
         "mode": "instruct",
         "character": "Example",
         "instruction_template": "Vicuna-v1.1",
@@ -97,13 +105,25 @@ def generate_tts(text):
     
     response = requests.post(endpoint_url, json=data)
 
-    with open(f'storage/{uid}.txt', 'w') as text_file:
+    with open(f'storage/{uid}.wav', 'w') as text_file:
         text_file.write(response.content.decode('utf-8'))
 
+    # parse the content.
+    data = json.loads(response.content)
+
+    results = data['results']
+    history = results[0]["history"]
+    espeak_tts_result = history["visible"][0][1]
+    global ai_history
+
+    ai_history = history 
+
     # Using subprocess to call espeak command
-    subprocess.run(['espeak', '-ven', '+f3', '-s150', f'-w storage/{uid}.wav', response.content.decode('utf-8')])
+    subprocess.run(['espeak', '-ven', f'{espeak_tts_result}', '-s150', f'-w storage/{uid}.wav', response.content.decode('utf-8')])
 
     convert(f'storage/{uid}.wav', f'storage/{uid}.ogg')
+    
+    subprocess.run(['cp', f'./storage/{uid}.ogg', f'./play/{uid}.ogg'])
 
     return playurl + uid + '.ogg'
 
@@ -130,6 +150,8 @@ schedule.every(10).minutes.do(cleanup_WAV)
 schedule.every(1).hour.do(cleanup_OGG)
 
 if __name__ == '__main__':
-    app.run(port=5000)
+    #app.run(port=5000, debug=False)
+    http_server = WSGIServer(("0.0.0.0", 5000), app)
+    http_server.serve_forever()
     schedule.run_pending()
     time.sleep(1)
